@@ -8,6 +8,8 @@ export PGPASSWORD=`cat /home/lgomes/.config/postgrespw`
 export BACKUPFOLDER=/mnt/data/raspbackup
 export BACKUPID=0B6jHaMqrb3iYdlF4QTNId0luRkE
 
+export BANANABACKUPFOLDER=/mnt/data/bananabackup
+export BANANABACKUPID=0B6jHaMqrb3iYal9BRHBUdHZNNkk
 
 # backup files
 crontab -l >  $BACKUPFOLDER/crontab
@@ -23,6 +25,7 @@ pg_dump -C -h neko | gpg --batch --yes -r lgomes -e -o $BACKUPFOLDER/database.sq
 
 # sync data with google drive
 gdrive sync upload --no-progress $BACKUPFOLDER $BACKUPID
+gdrive sync upload --no-progress $BANANABACKUPFOLDER $BANANABACKUPID
 
 
 tar czf /mnt/data/notebooks.tar.gz /home/lgomes/projects/python/notebooks
