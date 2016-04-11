@@ -1,11 +1,20 @@
 import configparser
+import io
 import os
 import sys
 import time
 from datetime import date, timedelta
 
 import pandas as pd
-import pynma
+import telegram
+from tabulate import tabulate
+
+
+import matplotlib
+matplotlib.use('Agg')
+import seaborn as sns
+sns.set_context("poster")
+
 from pyvirtualdisplay import Display
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -121,29 +130,53 @@ if __name__ == '__main__':
 
     curr_funds = funds[funds.date == date.today()].value.sum()
     yest_funds = funds[funds.date == date.today() - timedelta(days=1)].value.sum()
+    
+    df = funds[funds.date >= date.today() - timedelta(days=1)].copy()
+    df.date = df.date.apply(lambda x: x.date().strftime('%y-%m-%d'))
+    df = df[['date', 'value', 'type']].pivot(columns='date', index='type', values='value')
+    df.index = df.index.str[:7]
+
 
     if curr_funds > yest_funds:
-        title = "Funds up!"
-        message = "Funds went up from {0:.2f} to {1:.2f}.\n{2}".format(
+        message = "Funds went up from {0:.2f} € to {1:.2f} €.\n\n{2}".format(
             yest_funds,
             curr_funds,
-            funds[funds.date >= date.today() - timedelta(days=1)][['type', 'date', 'value']].to_string(index=False)
+            tabulate(df, headers=['type'] + list(df.columns))
         )
     elif curr_funds < yest_funds:
-        title = "Funds down!"
-        message = "Funds went down from {0:.2f} to {1:.2f}.\n{2}".format(
+        message = "Funds went down from {0:.2f} € to {1:.2f} €.\n\n{2}".format(
             yest_funds,
             curr_funds,
-            funds[funds.date >= date.today() - timedelta(days=1)][['type', 'date', 'value']].to_string(index=False)
+            tabulate(df, headers=['type'] + list(df.columns))
         )
     else:
         # no change. Probably a weekend or holiday
-        title = "No change!"
-        message = "Funds remained at {0:.2f}.\n{1}".format(
-            curr_funds,
-            funds[funds.date >= date.today() - timedelta(days=1)][['type', 'date', 'value']].to_string(index=False)
-        )
-
-    nma = pynma.PyNMA(config['pynma']['key'])
-    res = nma.push('CGD Funds', title, message)
-
+        message = None
+        
+    
+    if message:
+        # get invested values
+        movements = pd.read_sql('account_movements', engine)
+        invested = movements[movements.description == 'Subscrição Fundos'].ammount.sum()
+        single_inv = invested / 2
+        # get daily values
+        funds = funds[['date', 'type', 'value']]
+        funds['percentage'] = ((funds.value / single_inv) - 1) * 100
+        daily = funds.pivot_table(index='date', columns='type', values=['value', 'percentage'], aggfunc=sum)
+        daily_total = funds.pivot_table(index='date', values=['value'], aggfunc=sum)
+        daily_total['percentage'] = ((daily_total.value / invested) - 1) * 100
+        # create a plot from the daily values
+        fig = matplotlib.pyplot.figure()
+        ax1 = fig.add_subplot(111)
+        ax2 = ax1.twinx()
+        daily_total.value.plot(ax=ax1, color='r')
+        daily.value.plot(ax=ax2)
+        
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png')
+        buf.seek(0)
+    
+        # send message and image.
+        bot = telegram.Bot(token=config['telegram']['token'])
+        bot.sendMessage(chat_id=config['telegram']['chat_id'], text=message)
+        bot.sendPhoto(chat_id=config['telegram']['chat_id'], photo=io.BufferedReader(buf))
