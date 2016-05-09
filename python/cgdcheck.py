@@ -16,70 +16,85 @@ import seaborn as sns
 sns.set_context("poster")
 
 from pyvirtualdisplay import Display
+
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 from sqlalchemy import create_engine
 
 
-def get_values(username, password):
-    # open headless browser
-    """
-    Uses selenium and pyvirtualdisplay to go through the necessary steps to get the required values.
-    :param username:
-    :param password:
-    :return:
-    """
-    display = Display(visible=0, size=(1024, 768))
-    display.start()
-
+def get_browser(username, password):
+    """Get an instance of a firefox browser"""
+    
     browser = webdriver.Firefox()
-    browser.set_window_size(1020, 400)
+    browser.set_window_size(1020, 800)
+    
+    # set username
     browser.get('https://www.cgd.pt')
-
-    time.sleep(3)
-    # username
-    elem = browser.find_element_by_id('input_cx1')
+    elem = WebDriverWait(browser, 10).until(
+        EC.presence_of_element_located((By.ID, 'input_cx1'))
+    )
     elem.send_keys(username + Keys.ENTER)
-    time.sleep(3)
-
-    # Warning OK
-    elem = browser.find_element_by_id('j_id36')
-    elem.send_keys(Keys.ENTER)
-    time.sleep(3)
-
-    # Set password
-    elem = browser.find_element_by_id('passwordInput')
+    
+    # close warnings
+    elem = WebDriverWait(browser, 10).until(
+        EC.element_to_be_clickable((By.XPATH, '//*[@title="Fechar Aviso"]'))
+    )
+    elem.click()
+    
+    # add password
+    elem = WebDriverWait(browser, 10).until(
+        EC.presence_of_element_located((By.ID, 'passwordInput'))
+    )
     elem.send_keys(password + Keys.ENTER)
-    time.sleep(3)
-
-    # Clear warning
-    elem = browser.find_element_by_class_name('botao_ok')
-    elem.send_keys(Keys.ENTER)
-
+    
+    # close warnings
+    elem = WebDriverWait(browser, 10).until(
+        EC.element_to_be_clickable((By.CLASS_NAME, 'botao_ok'))
+    )
+    elem.click()
+    
+    return browser
+    
+    
+def get_funds_values(browser):
+    """
+    Get investment funds values. The values returned are the full text values
+    found in the page, and are untreated.
+    
+    :param browser: A selenium.webdriver object. It assumes the user is
+    already logged in.
+    """
+    
     # open investing menu
-    elem = browser.find_element_by_id('menuLink101150012')
-    elem.send_keys(Keys.ENTER)
-    time.sleep(3)
-
+    elem = WebDriverWait(browser, 10).until(
+        EC.element_to_be_clickable((By.ID, 'menuLink101150012'))
+    )
+    #browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    elem.click()
+    
     # open fundos menu
-    elem = browser.find_element_by_id('menuLink101150012101150032')
-    elem.send_keys(Keys.ENTER)
-    time.sleep(3)
-
-    # click 
-    elem = browser.find_element_by_link_text('Carteira e movimentos')
-    elem.send_keys(Keys.ENTER)
-    time.sleep(3)
-
-    # get wanted data
-    elem = browser.find_element_by_id('tbMercado_PT')
-
+    elem = WebDriverWait(browser, 10).until(
+        EC.element_to_be_clickable((By.ID, 'menuLink101150012101150032'))
+    )
+    elem.click()
+    
+    # movements
+    elem = WebDriverWait(browser, 10).until(
+        EC.element_to_be_clickable((By.PARTIAL_LINK_TEXT, 'Carteira e movimentos'))
+    )
+    elem.click()
+    
+    # get the values
+    elem = WebDriverWait(browser, 10).until(
+        EC.element_to_be_clickable((By.ID, 'tbMercado_PT'))
+    )
+    
     values = elem.text
-
-    # close browser
-    browser.close()
-    display.stop()
-
+    
     return values
 
 
@@ -114,14 +129,27 @@ if __name__ == '__main__':
 
     engine = create_engine(config['db']['url'])
     old_funds = pd.read_sql('cgd_funds', engine)
+    
+    
     todays_values = old_funds[old_funds.date == date.today()]
     
     if len(todays_values) != 0:
         print("Already looked up today's values!")
         sys.exit(0)
 
+    
+    # get a browser window
+    display = Display(visible=0, size=(1024, 768))
+    display.start()
+    browser = get_browser(config['cgd']['username'], config['cgd']['password'])
     # get new funds
-    new_funds = convert_df(get_values(config['cgd']['username'], config['cgd']['password']))
+    new_funds = convert_df(get_funds_values(browser))
+    
+    # clean up
+    browser.quit()
+    display.stop()
+    
+    # 
     funds = pd.concat([old_funds, new_funds])
     funds.value = pd.to_numeric(funds.value)
     funds.date = pd.to_datetime(funds.date)
