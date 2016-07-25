@@ -3,9 +3,9 @@ import os
 import time
 
 import pandas as pd
-import telegram
 import requests
 import tabulate
+import telegram
 from bs4 import BeautifulSoup
 from sqlalchemy import create_engine
 
