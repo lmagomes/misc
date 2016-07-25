@@ -3,7 +3,7 @@ import os
 import time
 
 import pandas as pd
-import pynma
+import telegram
 import requests
 import tabulate
 from bs4 import BeautifulSoup
@@ -113,8 +113,6 @@ if __name__ == '__main__':
     packages = pd.read_sql('packages', engine)
     package_details = pd.read_sql('package_details', engine)
 
-    nma = pynma.PyNMA(config['pynma']['key'])
-
     # current package checkers
     packagecheck = {
         'ctt': check_ctt,
@@ -136,7 +134,15 @@ if __name__ == '__main__':
             new_data = data[:diff]
             new_data.to_sql('package_details', engine, if_exists='append', index=False)
 
-            nma.push('Packages', '{} {}'.format(row.description, row.code), tabulate.tabulate(data, tablefmt='grid'))
+            # send message.
+            message = '*{}* {}\n```{}```'.format(
+                row.description,
+                row.code,
+                tabulate.tabulate(data['date', 'location', 'details'], tablefmt='grid'))
+            bot = telegram.Bot(token=config['telegram']['token'])
+            bot.sendMessage(
+                chat_id=config['telegram']['chat_id'],
+                text=message,
+                parse_mode=telegram.ParseMode.MARKDOWN)
 
         time.sleep(1)
-
