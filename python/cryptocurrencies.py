@@ -47,6 +47,9 @@ def get_balance(wallet_type, address, api_key=None):
     if wallet_type == 'ETH':
         account = Account(address=address, api_key=api_key)
         value += float(account.get_balance()) / 1000000000000000000
+    elif wallet_type == 'XRB':
+        # hardcoded for now...
+        value = 10.179600
     else:
         value += blockcypher.get_total_balance(address, coin_symbol=wallet_type.lower()) / 100000000
     
@@ -87,6 +90,7 @@ def get_uphold(key, secret):
     df['source'] = 'uphold'
     df = df[['balance', 'coin', 'source']]
     
+    # return df[df.coin != 'EUR']
     return df
 
 def get_coinbase(key, secret):
@@ -174,7 +178,7 @@ if __name__ == '__main__':
     # and merge with market data
     df = pd.merge(df, mktdf, how='left')
     # change fiat rows. use uphold euro value
-    usd_eur = float(account['balances']['currencies']['USD']['rate'])
+    usd_eur = 0.83
     df.loc[df.coin == 'USD', ['id', 'euro_price', 'name']] = ['USD', usd_eur, 'Dollar']
     df.loc[df.coin == 'EUR', ['id', 'euro_price', 'name']] = ['EUR', 1, 'Euro']
     
