@@ -205,38 +205,3 @@ if __name__ == '__main__':
 
     # save to database
     df.to_sql('cryptocurrencies', engine, if_exists='append', index=False)
-
-    # Get some data calculations
-    total_fiat = round(df.fiat.sum(), 2)
-
-    grouped = df.groupby('name')[['balance', 'fiat']].sum()
-    gptable = tabulate(grouped, headers=['coin'] + list(grouped.columns))
-
-    sourcedf = pd.DataFrame(df.groupby('source')['fiat'].sum())
-    srctable = tabulate(sourcedf, headers=['source'] + list(sourcedf.columns))
-
-    # create some charts
-    df = pd.read_sql('cryptocurrencies', engine)
-    changedf = pd.DataFrame(df.groupby('read_date').fiat.sum()).pct_change()
-    
-    fig, axes = plt.subplots(nrows=3, figsize=(12.8,28.8))
-    df.pivot_table(index='read_date', values=['fiat'], aggfunc=sum).plot(kind='line', ax=axes[0])
-    # changedf.plot(kind='line', ax=axes[1])
-    df[df.coin != 'BTC'].pivot_table(index='read_date', columns='coin', values=['fiat'], aggfunc=sum).plot(ax=axes[1])
-    df[df.coin == 'BTC'].pivot_table(index='read_date', columns='coin', values=['fiat'], aggfunc=sum).plot(ax=axes[2])
-
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png')
-    buf.seek(0)
-    
-    
-    # send message and image.
-    # bot = telegram.Bot(token=config['telegram']['token'])
-    
-    # message = f"{gptable}\n\n{srctable}\n"
-    # bot.sendMessage(chat_id=config['telegram']['chat_id'], text=message)
-
-    # bot.sendPhoto(chat_id=config['telegram']['chat_id'], photo=io.BufferedReader(buf))
-    
-    # message = f"\n\nTotal is {total_fiat} €, and changed {changedf.iloc[-1].fiat * 100:.2f} %."
-    # bot.sendMessage(chat_id=config['telegram']['chat_id'], text=message)
