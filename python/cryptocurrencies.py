@@ -1,3 +1,11 @@
+
+# standard python imports
+import io
+import os
+from datetime import datetime
+import time
+import configparser
+
 # blockchain info for BTC
 from blockchain import blockexplorer
 
@@ -6,6 +14,7 @@ import blockcypher
 
 # etherscan for ETH
 from etherscan.accounts import Account
+from  etherscan.tokens import Tokens
 
 # coinmarketcap for prices
 from coinmarketcap import Market
@@ -22,31 +31,24 @@ from uphold import Uphold
 # coinbase
 from coinbase.wallet.client import Client
 
-import io
-import os
-from datetime import datetime
-import time
-import configparser
+# binance
+from binance.client import Client as BinClient
 
-
+# for calculating and storing values
 import pandas as pd
-import matplotlib
-matplotlib.use('Agg')
-
-import matplotlib.pyplot as plt
-
 from sqlalchemy import create_engine
 
-import telegram
-from tabulate import tabulate
 
-def get_balance(wallet_type, address, api_key=None):
+def get_balance(wallet_type, address, contract_address=None, api_key=None):
     """Get the balance of a single wallet."""
 
     value = 0
     if wallet_type == 'ETH':
         account = Account(address=address, api_key=api_key)
         value += float(account.get_balance()) / 1000000000000000000
+    elif wallet_type == 'EOS':
+        api = Tokens(contract_address=contract_address, api_key=api_key)
+        value += float(api.get_token_balance(address=address)) / 1000000000000000000
     elif wallet_type == 'XRB':
         # hardcoded for now...
         value = 10.179600
@@ -103,6 +105,19 @@ def get_coinbase(key, secret):
     df.columns = ['balance', 'coin', 'source']
     data.append(df)
 
+def get_binance(key, secret):
+    """Get balance from binance exchange API."""
+
+    client = BinClient(key, secret)
+    acct = client.get_account()
+    df = pd.DataFrame(acct['balances'])
+    df['source'] = 'binance'
+
+    df = df[['free', 'asset', 'source']]
+    df.columns = ['balance', 'coin', 'source']
+
+    return df
+
 
 if __name__ == '__main__':
 
@@ -123,7 +138,7 @@ if __name__ == '__main__':
     # Since data is falling quite a bit, temporarly check if we got
     # it, and if not, increase the limit of records returned.
     contains_data = False
-    limit = 120
+    limit = 125
     while not contains_data:
         markets = coinmarketcap.ticker(limit=limit, convert='EUR')
         mktdf = pd.DataFrame(markets)
@@ -153,12 +168,12 @@ if __name__ == '__main__':
     
     # read wallets
     df = pd.read_sql('cryptowallets', engine)
-    df['balance'] = df.apply(lambda x: get_balance(x['coin'], x['address'], config['etherscan']['key']), axis=1)
+    df['balance'] = df.apply(lambda x: get_balance(x['coin'], x['address'], x['contract_address'], config['etherscan']['key']), axis=1)
     df = df.groupby(['coin', 'source']).balance.sum().reset_index()
     data.append(df)
 
     # and exchanges
-    for exchange in ['bittrex', 'bitfinex', 'uphold', 'coinbase']:
+    for exchange in ['bittrex', 'bitfinex', 'uphold', 'coinbase', 'binance']:
         key = config[exchange]['key']
         secret = config[exchange]['secret']
         data.append(locals()[f"get_{exchange}"](key, secret))
